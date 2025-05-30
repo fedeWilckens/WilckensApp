@@ -85,7 +85,10 @@ class BreweryApp:
         self.main_frame = ctk.CTkFrame(self.root, fg_color=self.bg_color)
         self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        logo_image = Image.open("logo.png").resize((100, 100))
+        try:
+            logo_image = Image.open("logo.png").resize((100, 100))
+        except FileNotFoundError:
+            logo_image = Image.new("RGB", (100, 100), color="#2B2B2B")
         self.logo = ctk.CTkImage(light_image=logo_image, dark_image=logo_image, size=(100, 100))
         logo_label = ctk.CTkLabel(self.main_frame, image=self.logo, text="")
         logo_label.grid(row=0, column=0, padx=10, pady=10, sticky="nw")
@@ -405,10 +408,10 @@ class BreweryApp:
         self.update_client_table()
 
     def add_client(self):
-        client_id = self.client_id_entry.get()
-        name = self.client_name_entry.get()
-        contact = self.client_contact_entry.get()
-        address = self.client_address_entry.get()
+        client_id = self.client_id_entry.get().strip()
+        name = self.client_name_entry.get().strip()
+        contact = self.client_contact_entry.get().strip()
+        address = self.client_address_entry.get().strip()
         
         if not client_id or not name:
             messagebox.showerror("Error", "ID y Nombre son obligatorios")
@@ -428,7 +431,7 @@ class BreweryApp:
             messagebox.showerror("Error", "El ID del cliente ya existe")
 
     def delete_client(self):
-        client_id = self.client_id_entry.get()
+        client_id = self.client_id_entry.get().strip()
         if not client_id:
             messagebox.showerror("Error", "Ingresa el ID del cliente para eliminar")
             return
@@ -581,13 +584,13 @@ class BreweryApp:
         self.update_invoice_table()
 
     def add_invoice(self):
-        invoice_id = self.invoice_id_entry.get()
-        client_id = self.invoice_client_id_entry.get()
-        amount = self.invoice_amount_entry.get()
-        status = self.invoice_status_combobox.get()
+        invoice_id = self.invoice_id_entry.get().strip()
+        client_id = self.invoice_client_id_entry.get().strip()
+        amount = self.invoice_amount_entry.get().strip()
+        status = self.invoice_status_var.get()
         issue_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        if not invoice_id or not invoice_id or not amount:
+        if not invoice_id or not client_id or not amount:
             messagebox.showerror("Error", "ID, Cliente y Monto son obligatorios")
             return
             
@@ -595,7 +598,7 @@ class BreweryApp:
             amount = float(amount)
             if amount <= 0:
                 raise ValueError
-        except:
+        except ValueError:
             messagebox.showerror("Error", "El monto debe ser un número positivo")
             return
             
@@ -607,20 +610,20 @@ class BreweryApp:
             
         try:
             cursor.execute(
-                "INSERT INTO invoices (id, client_id, status, amount, issue_date) VALUES (?, ?, ?, ?)",
-                (invoice_id, client_id, status, amount, issue_date)
+                "INSERT INTO invoices (id, client_id, amount, status, issue_date) VALUES (?, ?, ?, ?, ?)",
+                (invoice_id, client_id, amount, status, issue_date)
             )
             self.conn.commit()
             self.update_invoice_table()
-            self.messagebox.showinfo("Éxito", "Factura agregada correctamente")
+            messagebox.showinfo("Éxito", "Factura agregada correctamente")
             self.clear_invoice_entries()
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "El ID de la factura ya existe")
 
     def add_payment(self):
-        payment_id = self.payment_id_entry.get()
-        invoice_id = self.client_id_entry.get()
-        amount = self.payment_amount_entry.get()
+        payment_id = self.payment_id_entry.get().strip()
+        invoice_id = self.invoice_id_entry.get().strip()
+        amount = self.payment_amount_entry.get().strip()
         payment_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         if not payment_id or not invoice_id or not amount:
@@ -631,7 +634,7 @@ class BreweryApp:
             amount = float(amount)
             if amount <= 0:
                 raise ValueError
-        except:
+        except ValueError:
             messagebox.showerror("Error", "El monto debe ser un número positivo")
             return
             
@@ -639,7 +642,7 @@ class BreweryApp:
         cursor.execute("SELECT id, amount FROM invoices WHERE id=?", (invoice_id,))
         invoice = cursor.fetchone()
         if not invoice:
-            messagebox.showerror", "Error", "La factura no existe")
+            messagebox.showerror("Error", "La factura no existe")
             return
             
         try:
@@ -649,7 +652,7 @@ class BreweryApp:
             )
             cursor.execute(
                 "UPDATE invoices SET status = ? WHERE id = ?",
-                ("Pagada" if amount >= invoice[1] else "Pendiente", invoice_id),
+                ("Pagada" if amount >= invoice[1] else "Pendiente", invoice_id)
             )
             self.conn.commit()
             self.update_invoice_table()
@@ -658,7 +661,7 @@ class BreweryApp:
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "El ID del pago ya existe")
 
-    def select_invoice(self, event=None):
+    def select_invoice(self, event):
         selected = self.invoice_tree.selection()
         if not selected:
             return
@@ -680,7 +683,7 @@ class BreweryApp:
         cursor.execute("SELECT id, client_id, amount, status, issue_date FROM invoices")
         for row in cursor.fetchall():
             if search_term in str(row[0]).lower() or search_term in str(row[1]).lower():
-                self.search_term_tree.insert("", "end", values=row)
+                self.invoice_tree.insert("", "end", values=row)
 
     def export_invoices(self):
         try:
@@ -736,12 +739,12 @@ class BreweryApp:
         
         ctk.CTkLabel(input_frame, text="Estado:", text_color=self.text_color).grid(row=2, column=2, padx=10, pady=5, sticky="e")
         self.batch_status_var = ctk.StringVar(value="En curso")
-        self.batch_status_comb = ctk.CTkComboBox(
+        self.batch_status_combobox = ctk.CTkComboBox(
             input_frame, values=["En curso", "Finalizado", "En espera"], variable=self.batch_status_var, 
             width=200, fg_color="#2B2B2B", text_color=self.text_color, button_color=self.accent_color,
             button_hover_color="#A68A64"
         )
-        self.batch_status_comb.grid(row=2, column=3, padx=10, pady=5)
+        self.batch_status_combobox.grid(row=2, column=3, padx=10, pady=5)
         
         ctk.CTkButton(input_frame, text="Agregar Lote", command=self.add_batch, fg_color=self.accent_color, hover_color="#A68A64", text_color=self.text_color).grid(row=3, column=0, columnspan=2, pady=15)
         ctk.CTkButton(input_frame, text="Eliminar Lote", command=self.delete_batch, fg_color=self.accent_color, hover_color="#A68A64", text_color=self.text_color).grid(row=3, column=2, columnspan=2, pady=15)
@@ -755,16 +758,16 @@ class BreweryApp:
         ctk.CTkButton(search_frame, text="Exportar a CSV", command=self.export_batches, fg_color=self.accent_color, hover_color="#A68A64", text_color=self.text_color).grid(row=0, column=2, padx=10, pady=5)
         
         self.batch_tree = ttk.Treeview(
-            tab, columns=("ID", "Producto de Capacidad", "Volumen", "Estado", "Fecha de Inicio"), show="headings", 
+            tab, columns=("ID", "Product Name", "Volume", "Status", "Start Date"), show="headings", 
             style="Treeview", height=15
         )
         self.batch_tree.heading("ID", text="ID del Lote")
-        self.batch_tree.heading("Producto de Capacidad", text="Nombre del Producto")
-        self.batch_tree.heading("Volumen", text="Volumen (L)")
+        self.batch_tree.heading("Product Name", text="Nombre del Producto")
+        self.batch_tree.heading("Volume", text="Volumen (L)")
         self.batch_tree.heading("Status", text="Estado")
         self.batch_tree.heading("Start Date", text="Fecha de Inicio")
         self.batch_tree.column("ID", width=150)
-        self.batch_tree.column("Producto de Capacidad", width=200)
+        self.batch_tree.column("Product Name", width=200)
         self.batch_tree.column("Volume", width=150)
         self.batch_tree.column("Status", width=150)
         self.batch_tree.column("Start Date", width=150)
@@ -776,7 +779,7 @@ class BreweryApp:
         v_scrollbar.grid(row=2, column=1, sticky="ns")
         self.batch_tree.configure(yscrollcommand=v_scrollbar.set)
         h_scrollbar = ctk.CTkScrollbar(tab, orientation="horizontal", command=self.batch_tree.xview, fg_color="#2B2B2B", button_color="#8B6F47", button_hover_color="#A68A64")
-        h_scrollbar.grid(row=6, column=0, sticky="ew")
+        h_scrollbar.grid(row=3, column=0, sticky="ew")
         self.batch_tree.configure(xscrollcommand=h_scrollbar.set)
         
         self.batch_tree.bind("<MouseWheel>", lambda event: self.smooth_scroll(self.batch_tree, event))
@@ -786,9 +789,9 @@ class BreweryApp:
         self.update_batch_table()
 
     def add_batch(self):
-        batch_id = self.batch_id_entry.get()
-        product_name = self.batch_name_entry.get()
-        volume = self.batch_volume_entry.get()
+        batch_id = self.batch_id_entry.get().strip()
+        product_name = self.batch_name_entry.get().strip()
+        volume = self.batch_volume_entry.get().strip()
         status = self.batch_status_var.get()
         start_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -807,7 +810,7 @@ class BreweryApp:
         try:
             cursor = self.conn.cursor()
             cursor.execute(
-                "INSERT INTO batches (id Eyed, product_name, volume, status, start_date) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO batches (id, product_name, volume, status, start_date) VALUES (?, ?, ?, ?, ?)",
                 (batch_id, product_name, volume, status, start_date)
             )
             self.conn.commit()
@@ -818,7 +821,7 @@ class BreweryApp:
             messagebox.showerror("Error", "El ID del lote ya existe")
 
     def delete_batch(self):
-        batch_id = self.batch_id_entry.get()
+        batch_id = self.batch_id_entry.get().strip()
         if not batch_id:
             messagebox.showerror("Error", "Ingresa el ID del lote para eliminar")
             return
@@ -835,7 +838,7 @@ class BreweryApp:
         messagebox.showinfo("Éxito", "Lote eliminado correctamente")
         self.clear_batch_entries()
 
-    def select_batch(self, event=None):
+    def select_batch(self, event):
         selected = self.batch_tree.selection()
         if not selected:
             return
@@ -847,14 +850,14 @@ class BreweryApp:
         self.batch_name_entry.insert(0, values[1])
         self.batch_volume_entry.delete(0, "end")
         self.batch_volume_entry.insert(0, values[2])
-        self.batch_status_comb.set(values[3])
+        self.batch_status_combobox.set(values[3])
 
     def search_batches(self, event=None):
         search_term = self.batch_search_entry.get().lower()
         for item in self.batch_tree.get_children():
             self.batch_tree.delete(item)
         cursor = self.conn.cursor()
-        cursor.execute("SELECT id, product_name, volume_id, status, start_date FROM batches")
+        cursor.execute("SELECT id, product_name, volume, status, start_date FROM batches")
         for row in cursor.fetchall():
             if search_term in str(row[0]).lower() or search_term in str(row[1]).lower():
                 self.batch_tree.insert("", "end", values=row)
@@ -862,9 +865,9 @@ class BreweryApp:
     def export_batches(self):
         try:
             cursor = self.conn.cursor()
-            cursor.execute("SELECT id, product_name, volume_id, status, start_date FROM batches")
+            cursor.execute("SELECT id, product_name, volume, status, start_date FROM batches")
             batches = cursor.fetchall()
-            df = pd.DataFrame(batches, columns=["ID", "Producto de Capacidad", "Volumen (L)", "Estado", "Fecha de Inicio"])
+            df = pd.DataFrame(batches, columns=["ID", "Nombre del Producto", "Volumen (L)", "Estado", "Fecha de Inicio"])
             filename = f"batches_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             df.to_csv(filename, index=False)
             messagebox.showinfo("Éxito", f"Datos exportados a {filename}")
@@ -884,7 +887,7 @@ class BreweryApp:
         self.batch_id_entry.delete(0, "end")
         self.batch_name_entry.delete(0, "end")
         self.batch_volume_entry.delete(0, "end")
-        self.batch_status_comb.set("En curso")
+        self.batch_status_combobox.set("En curso")
         self.batch_search_entry.delete(0, "end")
 
     def setup_fermenters_tab(self):
@@ -892,14 +895,14 @@ class BreweryApp:
         input_frame = ctk.CTkFrame(tab, fg_color=self.bg_color)
         input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
         
-        icon_label = ctk.CTkLabel(input_frame, text="[Icono Fermentadores]", font=("Helvetica", 14), text_color=self.text_color)
+        icon_label = ctk.CTkLabel(input_frame, text="[Icono Fermentadores]", font=("Arial", 14), text_color=self.text_color)
         icon_label.grid(row=0, column=0, padx=10, pady=5, sticky="w")
         
         ctk.CTkLabel(input_frame, text="ID del Fermentador:", text_color=self.text_color).grid(row=1, column=0, padx=10, pady=5, sticky="e")
         self.fermenter_id_entry = ctk.CTkEntry(input_frame, width=200, fg_color="#2B2B2B", text_color=self.text_color)
         self.fermenter_id_entry.grid(row=1, column=1, padx=10, pady=5)
         
-        ctk.CTkLabel(input_frame, text="Capacidad (L):", text_color=self.text_color).grid(row=2, column=0, padx=10, pady=5, sticky="e")
+        ctk.CTkLabel(input_frame, text="Capacidad (litros):", text_color=self.text_color).grid(row=2, column=0, padx=10, pady=5, sticky="e")
         self.fermenter_capacity_entry = ctk.CTkEntry(input_frame, width=200, fg_color="#2B2B2B", text_color=self.text_color)
         self.fermenter_capacity_entry.grid(row=2, column=1, padx=10, pady=5)
         
@@ -912,7 +915,7 @@ class BreweryApp:
         )
         self.fermenter_status_combobox.grid(row=1, column=3, padx=10, pady=5)
         
-        ctk.CTkLabel(input_frame, text="ID de Batch:", text_color=self.text_color).grid(row=2, column=2, padx=10, pady=5, sticky="e")
+        ctk.CTkLabel(input_frame, text="ID de Lote:", text_color=self.text_color).grid(row=2, column=2, padx=10, pady=5, sticky="e")
         self.fermenter_batch_id_entry = ctk.CTkEntry(input_frame, width=200, fg_color="#2B2B2B", text_color=self.text_color)
         self.fermenter_batch_id_entry.grid(row=2, column=3, padx=10, pady=5)
         
@@ -925,7 +928,7 @@ class BreweryApp:
         self.fermenter_search_entry = ctk.CTkEntry(search_frame, width=300, fg_color="#2B2B2B", text_color=self.text_color)
         self.fermenter_search_entry.grid(row=0, column=1, padx=10, pady=5)
         self.fermenter_search_entry.bind("<KeyRelease>", self.search_fermenters)
-        ctk.CTkButton(search_frame, text="Exportar CSV", command=self.export_fermenters, fg_color=self.accent_color, hover_color="#A68A64", text_color=self.text_color).grid(row=0, column=2, padx=10, pady=5)
+        ctk.CTkButton(search_frame, text="Exportar a CSV", command=self.export_fermenters, fg_color=self.accent_color, hover_color="#A68A64", text_color=self.text_color).grid(row=0, column=2, padx=10, pady=5)
         
         self.fermenter_tree = ttk.Treeview(
             tab, columns=("ID", "Capacity", "Status", "Batch ID", "Start Date"), show="headings", 
@@ -934,7 +937,7 @@ class BreweryApp:
         self.fermenter_tree.heading("ID", text="ID del Fermentador")
         self.fermenter_tree.heading("Capacity", text="Capacidad (L)")
         self.fermenter_tree.heading("Status", text="Estado")
-        self.fermenter_tree.heading("Batch ID", text="ID de Batch")
+        self.fermenter_tree.heading("Batch ID", text="ID de Lote")
         self.fermenter_tree.heading("Start Date", text="Fecha de Inicio")
         self.fermenter_tree.column("ID", width=150)
         self.fermenter_tree.column("Capacity", width=150)
@@ -954,15 +957,15 @@ class BreweryApp:
         
         self.fermenter_tree.bind("<MouseWheel>", lambda event: self.smooth_scroll(self.fermenter_tree, event))
         self.fermenter_tree.bind("<Shift-MouseWheel>", lambda event: self.smooth_scroll(self.fermenter_tree, event, horizontal=True))
-        self.fermenter_tree.bind("<Double-1>", self.select_fermenter)
+        self.fermenter_tree.bind("<<TreeviewSelect>>", self.select_fermenter)
         
         self.update_fermenter_table()
 
     def add_fermenter(self):
-        fermenter_id = self.fermenter_id_entry.get()
-        capacity = self.fermenter_capacity_entry.get()
+        fermenter_id = self.fermenter_id_entry.get().strip()
+        capacity = self.fermenter_capacity_entry.get().strip()
         status = self.fermenter_status_var.get()
-        batch_id = self.fermenter_batch_id_entry.get() or None
+        batch_id = self.fermenter_batch_id_entry.get().strip() or None
         start_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if status == "Ocupado" else None
         
         if not fermenter_id or not capacity:
@@ -980,7 +983,7 @@ class BreweryApp:
             cursor = self.conn.cursor()
             cursor.execute("SELECT id FROM batches WHERE id=?", (batch_id,))
             if not cursor.fetchone():
-                messagebox.showerror("Error", "El ID de batch no existe")
+                messagebox.showerror("Error", "El ID de lote no existe")
                 return
                 
         try:
@@ -997,7 +1000,7 @@ class BreweryApp:
             messagebox.showerror("Error", "El ID del fermentador ya existe")
 
     def delete_fermenter(self):
-        fermenter_id = self.fermenter_id_entry.get()
+        fermenter_id = self.fermenter_id_entry.get().strip()
         if not fermenter_id:
             messagebox.showerror("Error", "Ingresa el ID del fermentador para eliminar")
             return
@@ -1014,7 +1017,7 @@ class BreweryApp:
         messagebox.showinfo("Éxito", "Fermentador eliminado correctamente")
         self.clear_fermenter_entries()
 
-    def select_fermenter(self, event=None):
+    def select_fermenter(self, event):
         selected = self.fermenter_tree.selection()
         if not selected:
             return
@@ -1044,7 +1047,7 @@ class BreweryApp:
             cursor = self.conn.cursor()
             cursor.execute("SELECT id, capacity, status, batch_id, start_date FROM fermenters")
             fermenters = cursor.fetchall()
-            df = pd.DataFrame(fermenters, columns=["ID", "Capacidad (L)", "Estado", "ID de Batch", "Fecha de Inicio"])
+            df = pd.DataFrame(fermenters, columns=["ID", "Capacidad (L)", "Estado", "ID de Lote", "Fecha de Inicio"])
             filename = f"fermenters_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             df.to_csv(filename, index=False)
             messagebox.showinfo("Éxito", f"Datos exportados a {filename}")
